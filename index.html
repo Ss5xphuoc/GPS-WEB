@@ -937,6 +937,17 @@ let phoneGpsLastClock = 0;
 $("btnGpsRoute").onclick = async () => {
   if (!navigator.geolocation) { log("Browser không hỗ trợ GPS", "err"); return; }
   if (!(await connectNav())) return;
+
+  // TẮT simulate nếu đang chạy
+  if (simTimer) {
+    clearInterval(simTimer);
+    simTimer = null;
+    simState = null;
+    $("btnSim").disabled = false;
+    $("btnStopSim").disabled = true;
+    log("Đã dừng simulate để chạy GPS thật", "sys");
+  }
+
   if (phoneGpsWatch !== null) navigator.geolocation.clearWatch(phoneGpsWatch);
   phoneGpsReady = false;
   $("btnGpsRoute").disabled = true;
