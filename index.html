@@ -31,9 +31,24 @@
   .hint { font-size:12px; color:var(--dim); margin-top:8px; }
   .badge { font-size:12px; color:var(--dim); }
   @media (max-width:820px){ main{ grid-template-columns:1fr; } }
+  #authOverlay { position:fixed; top:0; left:0; right:0; bottom:0; background:var(--bg); z-index:9999; display:flex; align-items:center; justify-content:center; }
+  #authBox { background:var(--panel); border:2px solid var(--line); border-radius:12px; padding:32px; max-width:400px; width:90%; text-align:center; }
+  #authBox h2 { margin:0 0 20px; color:var(--tx); }
+  #authBox input { margin:16px 0; }
+  #authBox button { width:100%; padding:12px; }
+  #authBox .error { color:#f87171; font-size:13px; margin-top:12px; }
 </style>
 </head>
 <body>
+<div id="authOverlay">
+  <div id="authBox">
+    <h2>🔒 ESP32 Navigation</h2>
+    <p class="hint">Nhập access key để tiếp tục</p>
+    <input type="password" id="accessKey" placeholder="Access Key" />
+    <button id="btnAuth">Unlock</button>
+    <div class="error" id="authError" style="display:none">❌ Key không đúng!</div>
+  </div>
+</div>
 <header>
   <span class="dot" id="dot"></span>
   <h1>OSM Nav — Web Bluetooth → ESP32-S3 map</h1>
@@ -184,6 +199,36 @@
 </main>
 
 <script>
+// ---- ACCESS CONTROL ----
+const SECRET_KEY = "77497749";  // ĐỔI KEY NÀY THÀNH MẬT KHẨU CỦA BẠN
+const authOverlay = document.getElementById("authOverlay");
+const accessKeyInput = document.getElementById("accessKey");
+const authError = document.getElementById("authError");
+
+// Check URL parameter or localStorage
+const urlParams = new URLSearchParams(window.location.search);
+const urlKey = urlParams.get("key");
+const savedKey = localStorage.getItem("navAccessKey");
+
+if (urlKey === SECRET_KEY || savedKey === SECRET_KEY) {
+  authOverlay.style.display = "none";
+  if (urlKey) localStorage.setItem("navAccessKey", urlKey);
+} else {
+  document.getElementById("btnAuth").onclick = () => {
+    const key = accessKeyInput.value.trim();
+    if (key === SECRET_KEY) {
+      localStorage.setItem("navAccessKey", key);
+      authOverlay.style.display = "none";
+      authError.style.display = "none";
+    } else {
+      authError.style.display = "block";
+    }
+  };
+  accessKeyInput.onkeypress = (e) => {
+    if (e.key === "Enter") document.getElementById("btnAuth").click();
+  };
+}
+
 // ---- BLE ----
 const SERVICE = "5a7e1000-2b2f-4f66-9f9a-5c0f8e1a2b3c";
 const CHAR    = "5a7e1001-2b2f-4f66-9f9a-5c0f8e1a2b3c";
