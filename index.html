@@ -37,6 +37,11 @@
   #authBox input { margin:16px 0; }
   #authBox button { width:100%; padding:12px; }
   #authBox .error { color:#f87171; font-size:13px; margin-top:12px; }
+  #suggestions { list-style:none; margin:0; padding:0; }
+  #suggestions div { padding:8px 12px; cursor:pointer; border-bottom:1px solid var(--line); font-size:13px; }
+  #suggestions div:hover { background:var(--line); }
+  #suggestions div .name { color:var(--tx); font-weight:500; }
+  #suggestions div .addr { color:var(--dim); font-size:11px; margin-top:2px; }
 </style>
 </head>
 <body>
@@ -78,17 +83,24 @@
       <!-- Custom route input -->
       <label style="margin-top:16px">🗺️ Custom Route (tìm đường tùy chỉnh)</label>
       <div class="row">
-        <label style="margin:0">Start (lat, lon) <input type="text" id="startCoord" value="16.0544, 108.2022" style="width:190px"/></label>
+        <label style="margin:0">📍 Điểm bắt đầu (GPS hiện tại) <input type="text" id="startCoord" value="16.0544, 108.2022" style="width:190px" readonly/></label>
       </div>
-      <div class="row">
-        <label style="margin:0">End (lat, lon) <input type="text" id="endCoord" value="15.8801, 108.3380" style="width:190px"/></label>
+      <div class="row" style="position:relative">
+        <label style="margin:0; flex:1">
+          🎯 Nhập địa chỉ đến
+          <input type="text" id="endPlace" placeholder="Nhập địa chỉ, địa điểm..." style="width:100%" autocomplete="off"/>
+          <div id="suggestions" style="display:none; position:absolute; background:var(--panel); border:1px solid var(--line); border-radius:6px; max-height:200px; overflow:auto; z-index:1000; width:calc(100% - 16px); margin-top:4px;"></div>
+        </label>
+      </div>
+      <div class="row" style="display:none">
+        <input type="text" id="endCoord" value="15.8801, 108.3380"/>
       </div>
       <div class="row">
         <button id="btnCustomRoute">🚀 Load custom route (OSRM)</button>
         <button id="btnGpsRoute">Bắt đầu GPS điện thoại → đích</button>
         <button id="btnStopGps" class="ghost" disabled>Dừng GPS</button>
       </div>
-      <p class="hint" style="margin:8px 0 0">Ví dụ Đà Nẵng: Cầu Rồng (16.0544, 108.2022) → Hội An (15.8801, 108.3380)</p>
+      <p class="hint" style="margin:8px 0 0">💡 Điểm bắt đầu tự động lấy từ GPS điện thoại. Gõ địa chỉ đích để tìm!</p>
     </div>
 
     <div class="panel" style="margin-top:16px">
@@ -933,7 +945,7 @@ $("btnGpsRoute").onclick = async () => {
   phoneGpsWatch = navigator.geolocation.watchPosition(async pos => {
     if (phoneGpsBusy) return;
     const c = pos.coords;
-    if ((c.accuracy || 999999) > 100) {
+    if ((c.accuracy || 999999) > 200) {  // Tăng từ 100m → 200m
       log(`Bỏ GPS kém: ±${Math.round(c.accuracy || 0)}m`, "err");
       return;
     }
@@ -1000,7 +1012,78 @@ $("btnStopSim").onclick = () => {
 // ---- init ----
 $("routeXml").value = sampleRoute();   // show something immediately
 loadSampleRoute();                     // replace with a real OSM path when ready
-log("ready — connect to NAV-OSM, then send a route and simulate a drive", "sys");
+
+// ---- Nominatim Autocomplete (OpenStreetMap - MIỄN PHÍ) ----
+let searchTimeout = null;
+const endPlaceInput = $("endPlace");
+const suggestionsDiv = $("suggestions");
+
+endPlaceInput.addEventListener('input', () => {
+  clearTimeout(searchTimeout);
+  const query = endPlaceInput.value.trim();
+
+  if (query.length < 3) {
+    suggestionsDiv.style.display = 'none';
+    return;
+  }
+
+  searchTimeout = setTimeout(async () => {
+    try {
+      // Nominatim API - MIỄN PHÍ, không cần key
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&countrycodes=vn&format=json&limit=5&addressdetails=1`;
+      const res = await fetch(url, {
+        headers: { 'Accept-Language': 'vi' }
+      });
+      const results = await res.json();
+
+      if (results.length === 0) {
+        suggestionsDiv.innerHTML = '<div style="padding:12px; color:var(--dim)">Không tìm thấy kết quả</div>';
+        suggestionsDiv.style.display = 'block';
+        return;
+      }
+
+      suggestionsDiv.innerHTML = '';
+      results.forEach(place => {
+        const div = document.createElement('div');
+        div.innerHTML = `
+          <div class="name">${place.display_name.split(',')[0]}</div>
+          <div class="addr">${place.display_name}</div>
+        `;
+        div.onclick = () => {
+          endPlaceInput.value = place.display_name.split(',')[0];
+          $("endCoord").value = `${place.lat}, ${place.lon}`;
+          suggestionsDiv.style.display = 'none';
+          log(`✓ Đích: ${place.display_name} (${parseFloat(place.lat).toFixed(5)}, ${parseFloat(place.lon).toFixed(5)})`, "sys");
+        };
+        suggestionsDiv.appendChild(div);
+      });
+      suggestionsDiv.style.display = 'block';
+    } catch (e) {
+      log(`Lỗi tìm kiếm: ${e.message}`, "err");
+    }
+  }, 500); // Đợi 500ms sau khi người dùng ngừng gõ
+});
+
+// Ẩn suggestions khi click ra ngoài
+document.addEventListener('click', (e) => {
+  if (!endPlaceInput.contains(e.target) && !suggestionsDiv.contains(e.target)) {
+    suggestionsDiv.style.display = 'none';
+  }
+});
+
+// Lấy GPS hiện tại làm điểm bắt đầu
+if (navigator.geolocation) {
+  navigator.geolocation.getCurrentPosition(pos => {
+    const lat = pos.coords.latitude;
+    const lng = pos.coords.longitude;
+    $("startCoord").value = `${lat.toFixed(7)}, ${lng.toFixed(7)}`;
+    log(`📍 Vị trí hiện tại: ${lat.toFixed(5)}, ${lng.toFixed(5)}`, "sys");
+  }, err => {
+    log("⚠️ Không lấy được GPS - dùng vị trí mặc định", "err");
+  }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
+}
+
+log("ready — 🆓 Nominatim search ready (miễn phí, không cần API key)", "sys");
 </script>
 </body>
 </html>
