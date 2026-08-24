@@ -1030,48 +1030,59 @@ endPlaceInput.addEventListener('input', () => {
   searchTimeout = setTimeout(async () => {
     try {
       // Photon API - MIỄN PHÍ, không giới hạn CORS
-      const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=5&lang=vi`;
+      const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(query + ' Vietnam')}&limit=5&lang=vi`;
       const res = await fetch(url);
 
       if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
-
-      const data = await res.json();
-      const results = data.features || [];
-
-      if (results.length === 0) {
-        suggestionsDiv.innerHTML = '<div style="padding:12px; color:var(--dim)">Không tìm thấy kết quả</div>';
-        suggestionsDiv.style.display = 'block';
+        // Fallback: thử không filter
+        const url2 = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=5`;
+        const res2 = await fetch(url2);
+        if (!res2.ok) throw new Error(`HTTP ${res2.status}`);
+        const data2 = await res2.json();
+        handleResults(data2);
         return;
       }
 
-      suggestionsDiv.innerHTML = '';
-      results.forEach(feature => {
-        const props = feature.properties;
-        const coords = feature.geometry.coordinates; // [lon, lat]
-        const name = props.name || props.street || 'Không rõ tên';
-        const city = props.city || props.state || '';
-        const displayName = city ? `${name}, ${city}` : name;
+      const data = await res.json();
+      handleResults(data);
 
-        const div = document.createElement('div');
-        div.innerHTML = `
-          <div class="name">${name}</div>
-          <div class="addr">${displayName}</div>
-        `;
-        div.onclick = () => {
-          endPlaceInput.value = name;
-          $("endCoord").value = `${coords[1]}, ${coords[0]}`; // lat, lon
-          suggestionsDiv.style.display = 'none';
-          log(`✓ Đích: ${displayName} (${coords[1].toFixed(5)}, ${coords[0].toFixed(5)})`, "sys");
-        };
-        suggestionsDiv.appendChild(div);
-      });
-      suggestionsDiv.style.display = 'block';
     } catch (e) {
       log(`Lỗi tìm kiếm: ${e.message}`, "err");
     }
   }, 500);
+
+  function handleResults(data) {
+    const results = data.features || [];
+
+    if (results.length === 0) {
+      suggestionsDiv.innerHTML = '<div style="padding:12px; color:var(--dim)">Không tìm thấy kết quả</div>';
+      suggestionsDiv.style.display = 'block';
+      return;
+    }
+
+    suggestionsDiv.innerHTML = '';
+    results.forEach(feature => {
+      const props = feature.properties;
+      const coords = feature.geometry.coordinates; // [lon, lat]
+      const name = props.name || props.street || 'Không rõ tên';
+      const city = props.city || props.state || '';
+      const displayName = city ? `${name}, ${city}` : name;
+
+      const div = document.createElement('div');
+      div.innerHTML = `
+        <div class="name">${name}</div>
+        <div class="addr">${displayName}</div>
+      `;
+      div.onclick = () => {
+        endPlaceInput.value = name;
+        $("endCoord").value = `${coords[1]}, ${coords[0]}`; // lat, lon
+        suggestionsDiv.style.display = 'none';
+        log(`✓ Đích: ${displayName} (${coords[1].toFixed(5)}, ${coords[0].toFixed(5)})`, "sys");
+      };
+      suggestionsDiv.appendChild(div);
+    });
+    suggestionsDiv.style.display = 'block';
+  }
 });
 
 // Ẩn suggestions khi click ra ngoài
