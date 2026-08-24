@@ -1029,12 +1029,16 @@ endPlaceInput.addEventListener('input', () => {
 
   searchTimeout = setTimeout(async () => {
     try {
-      // Nominatim API - MIỄN PHÍ, không cần key
-      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&countrycodes=vn&format=json&limit=5&addressdetails=1`;
-      const res = await fetch(url, {
-        headers: { 'Accept-Language': 'vi' }
-      });
-      const results = await res.json();
+      // Photon API - MIỄN PHÍ, không giới hạn CORS
+      const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=5&lang=vi`;
+      const res = await fetch(url);
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+      const results = data.features || [];
 
       if (results.length === 0) {
         suggestionsDiv.innerHTML = '<div style="padding:12px; color:var(--dim)">Không tìm thấy kết quả</div>';
@@ -1043,17 +1047,23 @@ endPlaceInput.addEventListener('input', () => {
       }
 
       suggestionsDiv.innerHTML = '';
-      results.forEach(place => {
+      results.forEach(feature => {
+        const props = feature.properties;
+        const coords = feature.geometry.coordinates; // [lon, lat]
+        const name = props.name || props.street || 'Không rõ tên';
+        const city = props.city || props.state || '';
+        const displayName = city ? `${name}, ${city}` : name;
+
         const div = document.createElement('div');
         div.innerHTML = `
-          <div class="name">${place.display_name.split(',')[0]}</div>
-          <div class="addr">${place.display_name}</div>
+          <div class="name">${name}</div>
+          <div class="addr">${displayName}</div>
         `;
         div.onclick = () => {
-          endPlaceInput.value = place.display_name.split(',')[0];
-          $("endCoord").value = `${place.lat}, ${place.lon}`;
+          endPlaceInput.value = name;
+          $("endCoord").value = `${coords[1]}, ${coords[0]}`; // lat, lon
           suggestionsDiv.style.display = 'none';
-          log(`✓ Đích: ${place.display_name} (${parseFloat(place.lat).toFixed(5)}, ${parseFloat(place.lon).toFixed(5)})`, "sys");
+          log(`✓ Đích: ${displayName} (${coords[1].toFixed(5)}, ${coords[0].toFixed(5)})`, "sys");
         };
         suggestionsDiv.appendChild(div);
       });
@@ -1061,7 +1071,7 @@ endPlaceInput.addEventListener('input', () => {
     } catch (e) {
       log(`Lỗi tìm kiếm: ${e.message}`, "err");
     }
-  }, 500); // Đợi 500ms sau khi người dùng ngừng gõ
+  }, 500);
 });
 
 // Ẩn suggestions khi click ra ngoài
@@ -1083,7 +1093,7 @@ if (navigator.geolocation) {
   }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
 }
 
-log("ready — 🆓 Nominatim search ready (miễn phí, không cần API key)", "sys");
+log("ready — 🆓 Photon search ready (miễn phí, không cần API key)", "sys");
 </script>
 </body>
 </html>
